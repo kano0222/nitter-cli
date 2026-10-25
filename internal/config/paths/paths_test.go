@@ -106,6 +106,54 @@ func TestEnsureDefaultConfigFileConcurrentCreators(t *testing.T) {
 	}
 }
 
+func TestEnsureDefaultConfigFileConcurrentCallersPreserveWinner(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.toml")
+	const callers = 16
+	const winner = "# published winner\ndefault_limit = 99\n"
+	ready := make(chan struct{}, callers)
+	start := make(chan struct{})
+	results := make(chan error, callers)
+	// Keep contenders active but gated until the winner has been published
+	// and recorded. This avoids relying on scheduler timing to observe it.
+	for i := 0; i < callers; i++ {
+		content := fmt.Sprintf("# contender %d\ndefault_limit = 20\n", i)
+		go func() {
+			ready <- struct{}{}
+			<-start
+			results <- paths.EnsureDefaultConfigFile(cfgPath, content)
+		}()
+	}
+	for i := 0; i < callers; i++ {
+		<-ready
+	}
+	publishErr := paths.EnsureDefaultConfigFile(cfgPath, winner)
+	winnerInfo, statErr := os.Stat(cfgPath)
+	// Release and join every contender before reporting setup failures.
+	close(start)
+	for i := 0; i < callers; i++ {
+		if err := <-results; err != nil {
+			t.Errorf("contender failed: %v", err)
+		}
+	}
+	if publishErr != nil {
+		t.Fatal(publishErr)
+	}
+	if statErr != nil {
+		t.Fatal(statErr)
+	}
+	data, err := os.ReadFile(cfgPath)
+	if err != nil || string(data) != winner {
+		t.Fatalf("published winner changed: content = %q, error = %v", data, err)
+	}
+	finalInfo, err := os.Stat(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !os.SameFile(winnerInfo, finalInfo) {
+		t.Fatal("published winner was replaced")
+	}
+}
+
 func TestEnsureDefaultConfigFilePreservesDanglingSymlink(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "missing.toml")

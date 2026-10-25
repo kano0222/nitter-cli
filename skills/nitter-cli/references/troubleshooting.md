@@ -55,8 +55,10 @@ successful output; **stderr is never JSON**.
    envelopes on the NDJSON stream (watch per-source failures land on stdout).
 2. For fetch problems, use the classified error first. Probe with
    `nitter instances test [--full]` only when instance health remains unclear;
-   HTTP 429 is rate limiting, not evidence of bad configuration. Do not repeat
-   searches or probes or change configuration in response to rate limiting.
+   HTTP 429 is rate limiting, not evidence of bad configuration. Avoid immediate
+   retries, repeated searches/probes, or replacing the instance to evade limits.
+   With user authorization, raise `request_interval` or reduce polling frequency
+   as described in the error table.
 3. For watch problems: `nitter seen list --state-dir <dir>` (or the default
    location without the flag) and references/watch.md's exit-code matrix.
 4. For anything state-changing (clear, set, unset, download --clean-temp):
