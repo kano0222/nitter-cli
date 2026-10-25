@@ -53,7 +53,10 @@ successful output; **stderr is never JSON**.
 
 1. Exit code (0/1/2) — then look at stderr (human text) or the `kind:"error"`
    envelopes on the NDJSON stream (watch per-source failures land on stdout).
-2. For fetch problems: `nitter instances test [--full]` and read the cells.
+2. For fetch problems, use the classified error first. Probe with
+   `nitter instances test [--full]` only when instance health remains unclear;
+   HTTP 429 is rate limiting, not evidence of bad configuration. Do not repeat
+   searches or probes or change configuration in response to rate limiting.
 3. For watch problems: `nitter seen list --state-dir <dir>` (or the default
    location without the flag) and references/watch.md's exit-code matrix.
 4. For anything state-changing (clear, set, unset, download --clean-temp):

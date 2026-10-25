@@ -13,4 +13,10 @@
 
 ## Fixed
 
+- Existing configuration can be read from a read-only directory without creating
+  temporary config files. First-run initialization remains atomic and does not
+  overwrite existing configuration.
+- Clarified authorized instance maintenance, scalar-only config commands, and
+  tweet-reference inputs for media downloads in the operator skill.
+
 ## Security

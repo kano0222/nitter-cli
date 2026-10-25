@@ -94,6 +94,45 @@ func TestConfigGetPublishesBaselineConfig(t *testing.T) {
 	}
 }
 
+func TestConfigReadOnlyDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory chmod does not enforce write denial on Windows")
+	}
+	home := tempHome(t)
+	dir := filepath.Dir(configFile(home))
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configFile(home), []byte("download_path = '/custom/media'\n"), 0o400); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	probe, err := os.CreateTemp(dir, ".write-probe-*")
+	if err == nil {
+		probe.Close()
+		os.Remove(probe.Name())
+		t.Skip("current user can write despite directory permissions")
+	}
+	if !os.IsPermission(err) {
+		t.Fatalf("write probe failed for an unexpected reason: %v", err)
+	}
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"config", "path"}, configFile(home)},
+		{[]string{"config", "get", "download_path"}, "download_path = /custom/media"},
+	} {
+		code, out, errOut := runCLI(t, "", tc.args...)
+		if code != 0 || strings.TrimSpace(out) != tc.want {
+			t.Errorf("%v: exit = %d, stdout = %q, stderr = %q", tc.args, code, out, errOut)
+		}
+	}
+}
+
 func TestConfigSetSeedsBaselineOnFreshHome(t *testing.T) {
 	home := tempHome(t)
 	code, _, errOut := runCLI(t, "", "config", "set", "default_limit", "30")
@@ -124,8 +163,8 @@ func TestConfigSetSeedsBaselineOnFreshHome(t *testing.T) {
 
 func TestConfigPublishFailureExits1(t *testing.T) {
 	home := tempHome(t)
-	// Make the app dir path a regular file so MkdirAll inside
-	// EnsureDefaultConfigFile fails; a config publish failure is a plain
+	// Make the app dir path a regular file so inspecting or creating the
+	// config path fails; a config publish failure is a plain
 	// error (exit 1), never a usage error.
 	if err := os.WriteFile(filepath.Join(home, ".nitter-cli"), []byte("not a dir"), 0o600); err != nil {
 		t.Fatalf("write blocking file: %v", err)
@@ -134,7 +173,7 @@ func TestConfigPublishFailureExits1(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit = %d, want 1 (stderr %q)", code, errOut)
 	}
-	if !strings.Contains(errOut, "create app dir") {
+	if !strings.Contains(errOut, "create app dir") && !strings.Contains(errOut, "inspect config") {
 		t.Fatalf("stderr = %q, want the publish failure cause", errOut)
 	}
 }
