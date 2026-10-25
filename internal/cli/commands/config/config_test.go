@@ -131,6 +131,24 @@ func TestConfigReadOnlyDirectory(t *testing.T) {
 			t.Errorf("%v: exit = %d, stdout = %q, stderr = %q", tc.args, code, out, errOut)
 		}
 	}
+	// After the read fast path, writes fail in SaveKnown's staging step:
+	// the 0500 directory rejects CreateTemp with permission denied, the
+	// error is a plain failure (exit 1), and the file keeps its content.
+	for _, args := range [][]string{
+		{"config", "set", "default_limit", "30"},
+		{"config", "unset", "download_path"},
+	} {
+		code, out, errOut := runCLI(t, "", args...)
+		if code != 1 {
+			t.Errorf("%v: exit = %d, want 1 (stdout = %q, stderr = %q)", args, code, out, errOut)
+		}
+		if !strings.Contains(errOut, "stage config") {
+			t.Errorf("%v: stderr = %q, want the staging failure", args, errOut)
+		}
+	}
+	if data, err := os.ReadFile(configFile(home)); err != nil || string(data) != "download_path = '/custom/media'\n" {
+		t.Errorf("read-only config changed: content = %q, error = %v", data, err)
+	}
 }
 
 func TestConfigSetSeedsBaselineOnFreshHome(t *testing.T) {
